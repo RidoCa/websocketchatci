@@ -229,6 +229,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
     <header class="msger-header">
       <div class="msger-header-title">
         <i class="fas fa-comment-alt"></i> Welccome <span id="username"></span>
+        <i class="fas fa-comment-alt"></i> Room ID <span id="room"></span>
       </div>
       <div class="msger-header-options">
         <span>
@@ -243,15 +244,22 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
       <div class="msg right-msg">
 
+        <?php
+        foreach ($all as $s => $tes) {
+          echo $tes['msg'] . '<br>';
+        }
+        ?>
+
       </div>
     </main>
 
     <form class="msger-inputarea">
       <input type="text" class="msger-input" placeholder="Enter your message...">
       <input type="text" class="msger-name" style="display:none" placeholder="Enter your username">
+      <input type="text" class="msger-room" style="display:none" placeholder="Enter your roomid">
       <div id="btnFile" onclick="getFile()">Files</div>
       <div style='height: 0px;width: 0px; overflow:hidden;'><input type="file" class="msger-file" id="files" /></div>
-      <button type="submit" class="msger-send-btn">Send</button>
+      <button type="submit" id="send-data" class="msger-send-btn">Login</button>
     </form>
   </section>
 
@@ -259,7 +267,9 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
   <script type="text/javascript">
     var conn = new WebSocket('ws://localhost:9191');
+    var tes = <?php echo "2" ?>;
     var username = $('#username').html();
+    var roomid = $('#room').html();
     var img = '';
     const OTHER_IMG = "https://image.flaticon.com/icons/svg/327/327779.svg";
     const PERSON_IMG = "https://image.flaticon.com/icons/svg/145/145867.svg";
@@ -298,7 +308,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
     conn.onopen = function(e) {
       console.log("Connection established!");
-      
+
 
 
     };
@@ -307,14 +317,15 @@ defined('BASEPATH') or exit('No direct script access allowed');
       if (fungsi == true) {
         $(".msger-input").attr('style', 'display:none');
         $(".msger-name").attr('style', 'display:block');
+        $(".msger-room").attr('style', 'display:block');
         $("#btnFile").attr('style', 'display:none');
         $(".msger-send-btn").html('LOGIN');
       } else {
         $(".msger-input").attr('style', 'display:block');
         $(".msger-name").attr('style', 'display:none');
+        $(".msger-room").attr('style', 'display:none');
         $("#btnFile").attr('style', 'display:block');
         $(".msger-send-btn").html('SEND');
-
       }
     }
 
@@ -326,10 +337,13 @@ defined('BASEPATH') or exit('No direct script access allowed');
       }
     }
     conn.onmessage = function(e) {
+
       var jsonMessage = JSON.parse(e.data);
       console.log(jsonMessage);
       if (jsonMessage.type === "message") {
-        appendMessage(jsonMessage.name, OTHER_IMG, 'left', jsonMessage.message);
+        if (jsonMessage.room == tes) {
+          appendMessage(jsonMessage.name, OTHER_IMG, 'left', jsonMessage.message, jsonMessage.room);
+        }
       } else if (jsonMessage.type === "onlineUsers") {
         var count = 0;
         var onlineUsers = "";
@@ -337,6 +351,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
         $.each(jsonMessage.onlineUsers, function(key, val) {
           if (username == val) {
             $('#username').html(username);
+            $('#room').html(room);
           }
           if (username != val) {
             if (count === 0) {
@@ -352,6 +367,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
         //console.log(onlineUsers);
         document.getElementById('onlineUsers').innerHTML = onlineUsers;
       }
+
     };
 
 
@@ -359,24 +375,32 @@ defined('BASEPATH') or exit('No direct script access allowed');
       event.preventDefault();
 
       const msgerName = $(".msger-name").val();
+      const msgerRoom = $(".msger-room").val();
       const msgText = $('.msger-input').val();
       console.log(msgerName);
+
       if (msgText != '') {
-        appendMessage(username, PERSON_IMG, "right", msgText);
-        conn.send("{\"type\":\"message\",\"name\":\"" + username + "\",\"message\":\"" + msgText + "\"}");
+        appendMessage(username, PERSON_IMG, "right", msgText, room);
+        savedata(msgerName, msgText, room);
+        if (msgerRoom == tes) {
+          conn.send("{\"type\":\"message\",\"name\":\"" + username + "\",\"message\":\"" + msgText + "\",\"room\":\"" + msgerRoom + "\"}");
+        }
         $('.msger-input').val('');
       } else if (msgerName != '') {
         username = msgerName;
+        room = msgerRoom;
         conn.send("{\"type\":\"login\",\"name\":\"" + username + "\"}");
         $('#username').html(username);
+        $('#room').html(msgerRoom);
         hideChat(false);
       }
 
     });
 
     function appendMessage(name, img, side, text) {
-      //   Simple solution for small apps
-      const msgHTML = `
+      if (room == tes) {
+        //   Simple solution for small apps
+        const msgHTML = `
     <div class="msg ${side}-msg">
 
       <div class="msg-img" style="background-image: url(${img})"></div>
@@ -389,11 +413,12 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
         <div class="msg-text">${text}</div>
       </div>
-    </div>
-  `;
+    </div>`;
 
-      $(".msger-chat").append(msgHTML);
-      $(".msger-chat").scrollTop += 500;
+        // $(".msger-chat").append(msgHTML);
+        $(".msger-chat").append(msgHTML);
+        $(".msger-chat").scrollTop += 500;
+      }
     }
 
     function formatDate(date) {
@@ -402,7 +427,30 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
       return `${h.slice(-2)}:${m.slice(-2)}`;
     }
+
+    function savedata(name, text, room) {
+
+      var dataString = {
+        'id_sender': name,
+        'msg': text,
+        'id_room': room
+      };
+      // alert(dataString);
+
+      $.ajax({
+        // url: "ajax_js/q_ajax.php",
+        url: "<?php echo base_url('index.php/'); ?>InsertDb/signin",
+        type: "POST",
+        dataType: 'json',
+        cache: false,
+        data: dataString,
+        success: function(response) {
+          alert(response);
+        }
+      });
+    }
   </script>
+
 </body>
 
 </html>
